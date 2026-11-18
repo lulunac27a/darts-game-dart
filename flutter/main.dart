@@ -1,144 +1,164 @@
-import 'dart:async';
 import 'dart:math';
+import 'package:flame/collisions.dart';
+import 'package:flame/components.dart';
+import 'package:flame/events.dart';
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const TargetGameApp());
+  runApp(GameWidget(game: CatcherGame()));
 }
 
-class TargetGameApp extends StatelessWidget {
-  const TargetGameApp({super.key});
+class CatcherGame extends FlameGame with HasCollisionDetection {
+  late final PlayerBasket player;
+  late final TextComponent scoreText;
+  late final TextComponent livesText;
+
+  int score = 0;
+  int lives = 3;
+  bool isGameOver = false;
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: const GameScreen(),
+  Color backgroundColor() => const Color(0xFF1A1A2E);
+
+  @override
+  Future<void> onLoad() async {
+    // 1. Add the player paddle at the bottom center
+    player = PlayerBasket()
+      ..position = Vector2(size.x / 2, size.y - 80);
+    add(player);
+
+    // 2. Add HUD text components
+    scoreText = TextComponent(
+      text: 'Score: 0',
+      position: Vector2(20, 40),
+      textRenderer: TextPaint(
+        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+      ),
+    );
+    livesText = TextComponent(
+      text: 'Lives: 3',
+      position: Vector2(size.x - 110, 40),
+      textRenderer: TextPaint(
+        style: const TextStyle(color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.bold),
+      ),
+    );
+    addAll([scoreText, livesText]);
+
+    // 3. Spawn falling orbs every 0.9 seconds
+    add(
+      SpawnComponent(
+        factory: (_) => FallingOrb(),
+        period: 0.9,
+      ),
     );
   }
-}
 
-class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
-
-  @override
-  State<GameScreen> createState() => _GameScreenState();
-}
-
-class _GameScreenState extends State<GameScreen> {
-  final Random _random = Random();
-  Timer? _gameTimer;
-
-  int _score = 0;
-  int _timeLeft = 20;
-  bool _isPlaying = false;
-
-  // Normalized coordinates (0.0 to 1.0)
-  double _targetX = 0.5;
-  double _targetY = 0.5;
-
-  void _startGame() {
-    setState(() {
-      _score = 0;
-      _timeLeft = 20;
-      _isPlaying = true;
-      _moveTarget();
-    });
-
-    _gameTimer?.cancel();
-    _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_timeLeft > 1) {
-          _timeLeft--;
-        } else {
-          _timeLeft = 0;
-          _isPlaying = false;
-          timer.cancel();
-        }
-      });
-    });
+  void increaseScore() {
+    if (isGameOver) return;
+    score++;
+    scoreText.text = 'Score: $score';
   }
 
-  void _moveTarget() {
-    // Keep target away from the extreme screen edges
-    _targetX = 0.1 + _random.nextDouble() * 0.8;
-    _targetY = 0.15 + _random.nextDouble() * 0.7;
-  }
+  void loseLife() {
+    if (isGameOver) return;
+    lives--;
+    livesText.text = 'Lives: $lives';
 
-  void _onTargetTapped() {
-    if (!_isPlaying) return;
-    setState(() {
-      _score++;
-      _moveTarget();
-    });
-  }
-
-  @override
-  void dispose() {
-    _gameTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Score: $_score'),
-            Text('Time: ${_timeLeft}s'),
-          ],
+    if (lives <= 0) {
+      isGameOver = true;
+      pauseEngine();
+      add(
+        TextComponent(
+          text: 'GAME OVER\nFinal Score: $score',
+          anchor: Anchor.center,
+          position: size / 2,
+          textRenderer: TextPaint(
+            style: const TextStyle(
+              color: Colors.amber,
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
-      ),
-      body: Stack(
-        children: [
-          if (_isPlaying)
-            Positioned(
-              left: _targetX * (screenSize.width - 64),
-              top: _targetY * (screenSize.height - 160),
-              child: GestureDetector(
-                onTapDown: (_) => _onTargetTapped(),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.gps_fixed, color: Colors.white, size: 32),
-                  ),
-                ),
-              ),
-            ),
-          if (!_isPlaying)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _timeLeft == 0 ? 'Game Over!' : 'Target Tapper',
-                    style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                  ),
-                  if (_timeLeft == 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text('Final Score: $_score', style: const TextStyle(fontSize: 22)),
-                    ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _startGame,
-                    child: Text(_timeLeft == 0 ? 'Play Again' : 'Start Game'),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
+      );
+    }
+  }
+}
+
+class PlayerBasket extends PositionComponent
+    with DragCallbacks, HasGameReference<CatcherGame> {
+  PlayerBasket()
+      : super(
+          size: Vector2(110, 24),
+          anchor: Anchor.center,
+        );
+
+  final Paint _paint = Paint()..color = const Color(0xFF00E5FF);
+
+  @override
+  Future<void> onLoad() async {
+    add(RectangleHitbox());
+  }
+
+  @override
+  void render(Canvas canvas) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(size.toRect(), const Radius.circular(12)),
+      _paint,
     );
+  }
+
+  @override
+  void onDragUpdate(DragUpdateEvent event) {
+    if (game.isGameOver) return;
+    position.x += event.localDelta.x;
+    // Keep the paddle inside the screen edges
+    position.x = position.x.clamp(size.x / 2, game.size.x - size.x / 2);
+  }
+}
+
+class FallingOrb extends CircleComponent
+    with CollisionCallbacks, HasGameReference<CatcherGame> {
+  static final Random _random = Random();
+  late final double speed;
+
+  FallingOrb() : super(radius: 16, anchor: Anchor.center) {
+    paint = Paint()..color = const Color(0xFFFFD166);
+    speed = 220 + _random.nextDouble() * 180;
+  }
+
+  @override
+  Future<void> onLoad() async {
+    final margin = radius * 2;
+    position = Vector2(
+      margin + _random.nextDouble() * (game.size.x - margin * 2),
+      -radius,
+    );
+    add(CircleHitbox());
+  }
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    // Multiply by dt so speed stays consistent regardless of frame rate
+    position.y += speed * dt;
+
+    if (position.y - radius > game.size.y) {
+      removeFromParent();
+      game.loseLife();
+    }
+  }
+
+  @override
+  void onCollisionStart(
+    Set<Vector2> intersectionPoints,
+    PositionComponent other,
+  ) {
+    super.onCollisionStart(intersectionPoints, other);
+    if (other is PlayerBasket) {
+      removeFromParent();
+      game.increaseScore();
+    }
   }
 }
