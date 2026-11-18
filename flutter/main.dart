@@ -24,8 +24,7 @@ class CatcherGame extends FlameGame with HasCollisionDetection {
   @override
   Future<void> onLoad() async {
     // 1. Add the player paddle at the bottom center
-    player = PlayerBasket()
-      ..position = Vector2(size.x / 2, size.y - 80);
+    player = PlayerBasket()..position = Vector2(size.x / 2, size.y - 80);
     add(player);
 
     // 2. Add HUD text components
@@ -33,14 +32,16 @@ class CatcherGame extends FlameGame with HasCollisionDetection {
       text: 'Score: 0',
       position: Vector2(20, 40),
       textRenderer: TextPaint(
-        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+            color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
       ),
     );
     livesText = TextComponent(
       text: 'Lives: 3',
       position: Vector2(size.x - 110, 40),
       textRenderer: TextPaint(
-        style: const TextStyle(color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+            color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.bold),
       ),
     );
     addAll([scoreText, livesText]);
